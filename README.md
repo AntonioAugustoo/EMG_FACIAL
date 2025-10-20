@@ -187,10 +187,10 @@ Contribuições são bem-vindas! Para contribuir:
 
 
 
-## 👥 Autores
+## 👥 Autores - Desenvolvimento inicial
 
-- **Antonio Augusto** - *Desenvolvimento inicial* - [@AntonioAugusto](https://github.com/AntonioAugustoo)
--** ** - *Desenvolvimento inicial* - [@](https://github.com/)
+- **Antonio Augusto** - *Front-end* - [@AntonioAugusto](https://github.com/AntonioAugustoo)
+- **Emily Horrana** - *Back-end* - [@emyHorrana](https://github.com/emyHorrana)
 
 ## 📞 Suporte
 
@@ -206,5 +206,4 @@ Para suporte técnico ou dúvidas:
 - [EMG Signal Processing](https://en.wikipedia.org/wiki/Electromyography)
 
 ---
-
-⚡ **Transformando sorrisos em dados, dados em conhecimento!** ⚡ 
+ **Transformando sorrisos em dados, dados em conhecimento!**  
