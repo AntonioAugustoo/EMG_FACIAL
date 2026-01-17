@@ -1,393 +1,400 @@
 let dom = {};
-
 const config = {
-    PREPARATION_TIME_MS: 2000,
-    COUNTDOWN_STEP_MS: 1000,
-    EXPRESSION_DURATION_S: 5,
-    PROGRESS_INTERVAL_MS: 100,
-    DATA_FETCH_INTERVAL_MS: 1000,
+    DATA_FETCH_INTERVAL_MS: 10, 
+    MAX_DATA_POINTS: 300, 
     TOAST_DURATION_MS: 3000,
+    MAX_ADC_VALUE: 4095, 
+    
+    VISUAL_Y_MAX: 1200, 
+    
+    VISUAL_X_MAX_S: 3,  
 };
 
 const state = {
-    isCapturing: false,
+    isMonitoring: false,
     startTime: null,
-    sequenceInProgress: false,
-    activeTimers: []
-};addEventListener('DOMContentLoaded', () => {
+    realTimeData: [], 
+    dataForSaving: [], 
+    savedFiles: [],
+    statistics: { currentADC: 0, totalSamples: 0 }, 
+    intervals: {} 
+};
+
+addEventListener('DOMContentLoaded', () => {
     dom = {
         startBtn: document.getElementById('startBtn'),
-        exportBtn: document.getElementById('exportBtn'),
+        stopBtn: document.getElementById('stopBtn'),
         clearBtn: document.getElementById('clearBtn'),
-        modalStopBtn: document.getElementById('modalStopBtn'),
-        status: document.getElementById('status'),
-        captureModal: document.getElementById('captureModal'),
-        stageEmoji: document.getElementById('stageEmoji'),
-        stageText: document.getElementById('stageText'),
-        countdown: document.getElementById('countdown'),
-        progressContainer: document.getElementById('progressContainer'),
-        progressFill: document.getElementById('progressFill'),
-        progressText: document.getElementById('progressText'),
-        modalControls: document.getElementById('modalControls'),
         toast: document.getElementById('toast'),
-        csvArea: document.getElementById('csvArea'),
+        fileHistoryBody: document.getElementById('fileHistoryBody'),
         dataTableBody: document.getElementById('dataTableBody'),
-        currentAmplitude: document.getElementById('currentAmplitude'),
+        currentAmplitude: document.getElementById('currentAmplitude'), 
         avgFrequency: document.getElementById('avgFrequency'),
-        sampleCount: document.getElementById('sampleCount'),
         recordingTime: document.getElementById('recordingTime'),
+        signalChart: document.getElementById('signalChart'), 
+        saveModal: document.getElementById('saveModal'),
+        btnNo: document.getElementById('btnNo'),
+        btnYes: document.getElementById('btnYes'),
+        btnSave: document.getElementById('btnSave'),
+        fileName: document.getElementById('fileName'),
+        inputGroup: document.getElementById('inputGroup'),
+        modalBody: document.getElementById('modalBody'),
+        connectionStatus: document.getElementById('connectionStatus'),
+        clock: document.getElementById('clock'),
     };
 
-    dom.startBtn.addEventListener('click', iniciarSequencia);
-    dom.exportBtn.addEventListener('click', baixar);
-    dom.clearBtn.addEventListener('click', limparRegistro);
-    dom.modalStopBtn.addEventListener('click', pararCaptura);
+    dom.startBtn.addEventListener('click', iniciarMonitoramento);
+    dom.stopBtn.addEventListener('click', pararESalvar);
+    dom.clearBtn.addEventListener('click', limparDados);
+    dom.btnNo.addEventListener('click', fecharModal);
+    dom.btnYes.addEventListener('click', mostrarInputNome);
+    dom.btnSave.addEventListener('click', salvarArquivo);
+    dom.saveModal.addEventListener('click', (e) => {
+        if (e.target === dom.saveModal) fecharModal();
+    });
 
-    setInterval(fetchData, config.DATA_FETCH_INTERVAL_MS);
+    redimensionarCanvas();
+    window.addEventListener('resize', () => {
+        clearTimeout(window.resizeTimeout);
+        window.resizeTimeout = setTimeout(redimensionarCanvas, 200);
+    });
+    
+    config.MAX_DATA_POINTS = (config.VISUAL_X_MAX_S * 1000) / config.DATA_FETCH_INTERVAL_MS;
+    
+    requestAnimationFrame(animarGrafico); 
+    renderizarHistorico(); 
 });
 
-// Funções utilitárias para timestamp
-function formatarTimestamp(timestampValue) {
-    let dataObj;
+function buscarDadosRealTime() {
+    if (!state.isMonitoring) return; 
+
+    fetch('/live_data') 
+        .then(res => {
+            if (!res.ok) throw new Error('Network response not ok');
+            return res.json(); 
+        })
+        .then(data => {
+            if (data && data.time_ms !== undefined) {
+                 processarAmostraRealTime(data); 
+            }
+        })
+        .catch(err => {})
+        .finally(() => {
+            setTimeout(buscarDadosRealTime, config.DATA_FETCH_INTERVAL_MS);
+        });
+}
+
+function processarAmostraRealTime(data) {
+    if (!state.isMonitoring || data.time_ms === undefined) return; 
     
-    if (!timestampValue || isNaN(parseInt(timestampValue))) {
-        dataObj = new Date();
-    } else {
-        const timestamp = parseInt(timestampValue, 10);
-        
-        if (timestamp < 1000000000000) {
-            dataObj = new Date(timestamp * 1000);
-        } else {
-            dataObj = new Date(timestamp);
-        }
-        
-        if (isNaN(dataObj.getTime())) {
-            dataObj = new Date();
-        }
+    const amplitudeFiltrada = data.filtered || 0; 
+    const amplitudeBruta = data.raw || 0;
+    const timestamp = data.time_ms;
+
+    const newPoint = { 
+        timestamp: timestamp, 
+        filtered: amplitudeFiltrada, 
+        raw: amplitudeBruta,
+        dateObj: new Date(state.startTime + timestamp) 
+    };
+
+    state.realTimeData.push(newPoint); 
+    state.dataForSaving.push(newPoint); 
+
+    state.statistics.currentADC = amplitudeFiltrada;
+    
+    if (state.realTimeData.length > config.MAX_DATA_POINTS) {
+        state.realTimeData.shift(); 
     }
     
-    return dataObj.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
+    const highlightClass = amplitudeFiltrada > 1000 || amplitudeFiltrada < 100 ? 'highlight-pulse' : '';
+    dom.currentAmplitude.innerHTML = `<span class="${highlightClass}">${amplitudeFiltrada}</span> <span class="unit">ADC</span>`; 
+    dom.avgFrequency.innerHTML = `${(1000 / config.DATA_FETCH_INTERVAL_MS).toFixed(0)} <span class="unit">Hz</span>`; 
+    
+    const ultimos = state.realTimeData.slice(-4).reverse();
+    dom.dataTableBody.innerHTML = ultimos.map(d => {
+        const timeStr = d.dateObj.toLocaleTimeString('pt-BR', { second: '2-digit', minute: '2-digit' }) + ':' + String(d.dateObj.getMilliseconds()).padStart(3, '0');
+        const ampHighlight = d.filtered > 1000 ? 'log-highlight' : ''; 
+        
+        return `
+            <div class="log-entry">
+                <span class="log-time">${timeStr}</span>
+                <span class="log-amplitude ${ampHighlight}">${d.filtered} ADC</span>
+            </div>
+        `;
+    }).join('');
+}
+
+function redimensionarCanvas() {
+    const container = dom.signalChart.parentElement;
+    dom.signalChart.width = container.clientWidth;
+    const headerOffset = 50; 
+    dom.signalChart.height = container.clientHeight - headerOffset; 
+    
+    if (dom.signalChart.height <= 50) {
+        dom.signalChart.height = 350; 
+    }
+}
+
+function desenharSinal(ctx, data, property, color, isFiltered = false) {
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const h_plot = h - 40; 
+    
+    const VISUAL_Y_MAX = config.VISUAL_Y_MAX;
+    const scaleY = h_plot / VISUAL_Y_MAX; 
+    const stepX = w / (config.MAX_DATA_POINTS - 1); 
+
+    ctx.beginPath();
+    ctx.strokeStyle = color; 
+    ctx.lineWidth = isFiltered ? 3 : 1;
+    ctx.shadowBlur = isFiltered ? 10 : 0; 
+    ctx.shadowColor = color;
+
+    data.forEach((pt, i) => {
+        const x = i * stepX;
+        let y_mapped = pt[property] * scaleY;
+        
+        if (y_mapped > h_plot) y_mapped = h_plot;
+        const y = h_plot - y_mapped;
+
+        if (i === 0) {
+            ctx.moveTo(x, y); 
+        } else {
+            ctx.lineTo(x, y);
+        }
     });
+    
+    ctx.stroke();
+    ctx.shadowBlur = 0; 
 }
 
-function gerarTimestampArquivo() {
-    return new Date().toISOString().replace(/[:.]/g, '-');
-}
+function desenharEixos(ctx, w, h) {
+    const divisiones = 5;
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'; 
+    ctx.font = '10px Quicksand';
+    
+    ctx.textAlign = 'right';
+    const VISUAL_Y_MAX = config.VISUAL_Y_MAX;
+    
+    for (let i = 0; i <= divisiones; i++) {
+        const y_pos = (h / divisiones) * i;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, y_pos);
+        ctx.lineTo(w, y_pos);
+        ctx.stroke();
 
-function iniciarSequencia() {
-    if (state.isCapturing || state.sequenceInProgress) return;
-    state.sequenceInProgress = true;
-    dom.startBtn.disabled = true;
-    dom.captureModal.style.display = 'flex';
-    sequenciaPreparacao();
-}
-
-function pararCaptura() {
-    state.isCapturing = false;
-    state.sequenceInProgress = false;
-    clearAllTimers();
-    dom.captureModal.style.display = 'none';
-    dom.modalControls.style.display = 'none';
-    dom.startBtn.disabled = false;
-    dom.status.className = 'status stopped';
-    dom.status.innerHTML = '<div class="pulse"></div>Captura Interrompida';
-    fetch('/stop').then(res => res.text()).then(console.log);
-    safeSetTimeout(() => {
-        if (!state.sequenceInProgress) {
-            dom.status.innerHTML = '<div class="pulse"></div>Parado';
-        }
-    }, config.TOAST_DURATION_MS);
-}
-
-function sequenciaPreparacao() {
-    dom.captureModal.className = 'capture-modal stage-preparacao';
-    dom.stageEmoji.textContent = '🎯';
-    dom.stageText.textContent = 'Prepare-se';
-    dom.countdown.textContent = '';
-    safeSetTimeout(() => { if (state.sequenceInProgress) sequenciaContagem(); }, config.PREPARATION_TIME_MS);
-}
-
-function sequenciaContagem() {
-    dom.captureModal.className = 'capture-modal stage-contagem';
-    dom.stageEmoji.textContent = '⏰';
-    dom.stageText.textContent = 'Iniciando em...';
-    let count = 3;
-    function showCount() {
-        if (!state.sequenceInProgress) return;
-        dom.countdown.textContent = count;
-        dom.countdown.style.animation = 'none';
-        void dom.countdown.offsetHeight;
-        dom.countdown.style.animation = 'pulse-number 1s ease-in-out';
-        if (count > 1) {
-            count--;
-            safeSetTimeout(showCount, config.COUNTDOWN_STEP_MS);
-        } else {
-            safeSetTimeout(() => { if (state.sequenceInProgress) sequenciaExpressaoSeria(); }, config.COUNTDOWN_STEP_MS);
+        const adc_value = Math.round(VISUAL_Y_MAX - (VISUAL_Y_MAX / divisiones) * i);
+        if (i < divisiones) { 
+            ctx.fillText(`${adc_value}`, w - 5, y_pos + 10); 
         }
     }
-    showCount();
+    
+    ctx.textAlign = 'center';
+    
+    const data = state.realTimeData;
+    const temDados = data.length > 0;
+    const timeWindowMS = config.VISUAL_X_MAX_S * 1000;
+    
+    let now;
+    if (temDados) {
+        now = data[data.length - 1].dateObj;
+    }
+
+    for (let i = 0; i <= divisiones; i++) {
+        const x_pos = (w / divisiones) * i;
+        
+        ctx.beginPath();
+        ctx.moveTo(x_pos, 0);
+        ctx.lineTo(x_pos, h);
+        ctx.stroke();
+
+        let timeStr = "--:--";
+        
+        if (temDados && now) {
+            const timeOffset = timeWindowMS * (1 - (i / divisiones));
+            const gridTime = new Date(now.getTime() - timeOffset);
+            timeStr = gridTime.toLocaleTimeString('pt-BR', { second: '2-digit' }) + 
+                      ':' + String(gridTime.getMilliseconds()).padStart(3, '0').slice(0, 2);
+        } else if (i === divisiones) {
+            timeStr = "00:00";
+        }
+
+        ctx.fillText(timeStr, x_pos, h + 15);
+    }
+    
+    ctx.fillText("Tempo (s:ms)", w / 2, h + 30);
 }
 
-function sequenciaExpressaoSeria() {
-    dom.captureModal.className = 'capture-modal stage-seria';
-    dom.stageEmoji.textContent = '😐';
-    dom.stageText.textContent = 'Faça uma expressão séria';
-    dom.countdown.textContent = '';
-    dom.progressContainer.style.display = 'none';
-    state.isCapturing = true;
+function animarGrafico() {
+    const ctx = dom.signalChart.getContext('2d');
+    const w = dom.signalChart.width;
+    const h = dom.signalChart.height - 40; 
+    
+    ctx.clearRect(0, 0, w, dom.signalChart.height); 
+    
+    const data = state.realTimeData;
+    
+    desenharEixos(ctx, w, h);
+    
+    if (data.length < 2) {
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.5)';
+        ctx.font = '20px Quicksand';
+        ctx.textAlign = 'center';
+        ctx.fillText('Aguardando Fluxo de Dados...', w / 2, h / 2);
+        requestAnimationFrame(animarGrafico); 
+        return;
+    }
+
+    desenharSinal(ctx, data, 'raw', 'skyblue', false);
+    desenharSinal(ctx, data, 'filtered', '#FFD700', true);
+
+    requestAnimationFrame(animarGrafico); 
+}
+
+function iniciarMonitoramento() {
+    if (state.isMonitoring) return;
+    state.isMonitoring = true;
     state.startTime = Date.now();
-    fetch('/start').then(res => res.text()).then(console.log);
-    dom.status.className = 'status recording';
-    dom.status.innerHTML = '<div class="pulse"></div>Preparando - Expressão Séria';
-    safeSetTimeout(() => {
-        if (state.sequenceInProgress) iniciarContagemExpressao('Expressão Séria', sequenciaExpressaoSorriso);
-    }, config.PREPARATION_TIME_MS);
+    state.realTimeData = [];
+    state.dataForSaving = []; 
+    state.statistics = { currentADC: 0, totalSamples: 0 };
+    atualizarUI(true);
+    mostrarToast('✨ CAPTURANDO SINAL EMG...');
+    fetch('/start').catch(e => console.error("Falha ao enviar /start:", e)); 
+    setTimeout(() => {
+        buscarDadosRealTime(); 
+        state.intervals.timer = setInterval(atualizarCronometro, 1000);
+    }, 100); 
 }
 
-function sequenciaExpressaoSorriso() {
-    dom.captureModal.className = 'capture-modal stage-sorriso';
-    dom.stageEmoji.textContent = '😊';
-    dom.stageText.textContent = 'Pronto para sorrir?';
-    dom.progressContainer.style.display = 'none';
-    dom.status.innerHTML = '<div class="pulse"></div>Preparando - Sorriso';
-    safeSetTimeout(() => {
-        if (state.sequenceInProgress) iniciarContagemExpressao('Faça um Sorriso!', sequenciaSucesso);
-    }, config.PREPARATION_TIME_MS);
-}
-
-function iniciarContagemExpressao(texto, proximaEtapa) {
-    dom.stageText.textContent = texto;
-    dom.progressContainer.style.display = 'block';
-    dom.modalControls.style.display = 'block';
-    dom.status.innerHTML = `<div class="pulse"></div>Gravando - ${texto}`;
-    dom.progressFill.style.width = '0%';
-    dom.progressText.textContent = '0s';
-    let progress = 0;
-    const totalSteps = config.EXPRESSION_DURATION_S * (1000 / config.PROGRESS_INTERVAL_MS);
-    const progressIncrement = 100 / totalSteps;
-    const intervalId = setInterval(() => {
-        if (!state.sequenceInProgress) return clearInterval(intervalId);
-        progress += progressIncrement;
-        dom.progressFill.style.width = `${progress}%`;
-        dom.progressText.textContent = `${Math.ceil(progress / (100 / config.EXPRESSION_DURATION_S))}s`;
-        if (progress >= 100) {
-            clearInterval(intervalId);
-            safeSetTimeout(() => { if (state.sequenceInProgress) proximaEtapa(); }, 500);
+function pararESalvar() {
+    if (!state.isMonitoring) return;
+    state.isMonitoring = false; 
+    clearInterval(state.intervals.timer);
+    fetch('/stop').catch(e => console.error("Falha ao enviar /stop:", e));
+    atualizarUI(false);
+    setTimeout(() => {
+        if (state.dataForSaving.length === 0) {
+            mostrarToast('Nenhum dado capturado para salvar.');
+            return;
         }
-    }, config.PROGRESS_INTERVAL_MS);
-    state.activeTimers.push(intervalId);
+        abrirModal();
+    }, 100);
 }
 
-function sequenciaSucesso() {
-    dom.captureModal.className = 'capture-modal stage-sucesso';
-    dom.stageEmoji.textContent = '🎉';
-    dom.stageText.textContent = 'Sucesso!';
-    dom.countdown.textContent = 'Captura Finalizada';
-    dom.progressContainer.style.display = 'none';
-    dom.modalControls.style.display = 'none';
-    state.isCapturing = false;
-    fetch('/stop').then(res => res.text()).then(console.log);
-    dom.status.className = 'status stopped';
-    dom.status.innerHTML = '<div class="pulse"></div>Captura Concluída';
-    safeSetTimeout(() => {
-        if (!state.sequenceInProgress) return;
-        dom.captureModal.style.display = 'none';
-        dom.startBtn.disabled = false;
-        state.sequenceInProgress = false;
-        dom.status.innerHTML = '<div class="pulse"></div>Parado';
-        mostrarToast('Captura realizada com sucesso!');
-    }, config.TOAST_DURATION_MS);
-}
-
-function fetchData() {
-    if (state.isCapturing) {
-        fetch('/data')
-            .then(response => response.text())
-            .then(data => {
-                if (data && data.trim() !== '') {
-                    const processedData = processarDadosComTimestamp(data);
-                    dom.csvArea.value = processedData;
-                    atualizarEstatisticas(processedData);
-                }
-            })
-            .catch(error => console.error('Erro ao buscar dados:', error));
-    }
-}
-
-function processarDadosComTimestamp(csvData) {
-    const lines = csvData.trim().split('\n');
-    const currentTimestamp = Date.now();
+function gerarEExportarCSV(nomeUsuario) {
+    const fileName = `${nomeUsuario.replace(/[^a-z0-9]/gi, '_')}_EMG.csv`;
+    const header = 'Timestamp(ms),DataHoraISO,AmplitudeFiltrada(ADC),AmplitudeBruta(ADC)\n'; 
     
-    const processedLines = lines.map((line, index) => {
-        if (line.includes('Timestamp') || !line.includes(',')) {
-            return line;
-        }
-        
-        const data = line.split(',');
-        if (data.length < 2) return line;
-
-        if (!data[0] || isNaN(parseInt(data[0]))) {
-            const timestamp = Math.floor((currentTimestamp + (index * 100)) / 1000);
-            data[0] = timestamp.toString();
-            return data.join(',');
-        }
-        
-        return line;
-    });
+    const rows = state.dataForSaving.map(d => 
+        `${d.timestamp},${d.dateObj.toISOString()},${d.filtered},${d.raw}`
+    ).join('\n');
     
-    return processedLines.join('\n');
-}
-
-function atualizarEstatisticas(csvData) {
-    const lines = csvData.trim().split('\n');
-    const dataLines = lines.filter(line => line.includes(',') && !line.includes('Timestamp'));
-    if (dataLines.length === 0) return;
-    dom.sampleCount.textContent = dataLines.length;
-    if (state.startTime) {
-        const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
-        const mins = Math.floor(elapsed / 60);
-        const secs = elapsed % 60;
-        dom.recordingTime.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    }
-    const lastLine = dataLines[dataLines.length - 1].split(',');
-    if (lastLine.length >= 2) dom.currentAmplitude.textContent = `${lastLine[1]} mV`;
-    if (lastLine.length >= 3) {
-        const frequencies = dataLines.map(line => parseFloat(line.split(',')[2]) || 0);
-        const avgFreq = frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
-        dom.avgFrequency.textContent = `${avgFreq.toFixed(1)} Hz`;
-    }
-    atualizarTabela(dataLines);
-}
-
-function atualizarTabela(dataLines) {
-    const recentLines = dataLines.slice(-10);
-    dom.dataTableBody.innerHTML = '';
-    
-    recentLines.forEach(line => {
-        const data = line.split(',');
-        if (data.length < 3) return;
-
-        const row = dom.dataTableBody.insertRow();
-        const cellTime = row.insertCell(0);
-        
-        cellTime.textContent = formatarTimestamp(data[0]);
-        
-        const amplitude = parseFloat(data[1]);
-        const cellAmp = row.insertCell(1);
-        cellAmp.textContent = `${data[1]} mV`;
-        cellAmp.className = amplitude >= 0 ? 'amplitude-positive' : 'amplitude-negative';
-        
-        row.insertCell(2).textContent = `${data[2]} Hz`;
-        
-        const quality = Math.abs(amplitude) > 0.1 ? 'Boa' : 'Baixa';
-        const cellQuality = row.insertCell(3);
-        cellQuality.textContent = quality;
-        cellQuality.style.color = quality === 'Boa' ? '#27ae60' : '#f39c12';
-        
-        const cellExport = row.insertCell(4);
-        const exportBtn = document.createElement('button');
-        exportBtn.className = 'btn-export';
-        exportBtn.innerHTML = '💾 Baixar';
-        exportBtn.addEventListener('click', () => exportarLinha(line));
-        cellExport.appendChild(exportBtn);
-    });
-}
-
-function limparRegistro() {
-    dom.dataTableBody.innerHTML = '';
-    dom.currentAmplitude.textContent = '0.00 mV';
-    dom.avgFrequency.textContent = '0.0 Hz';
-    dom.sampleCount.textContent = '0';
-    dom.recordingTime.textContent = '00:00';
-    mostrarToast('Registro limpo com sucesso!');
-}
-
-function exportarLinha(linhaDados) {
-    const header = 'Data e Hora,Amplitude (mV),Frequência (Hz),Qualidade\n';
-    const data = linhaDados.split(',');
-    if (data.length < 3) return;
-    
-    const timestampFormatado = formatarTimestamp(data[0]);
-    const amplitude = parseFloat(data[1]);
-    const quality = Math.abs(amplitude) > 0.1 ? 'Boa' : 'Baixa';
-    const csvLine = `${timestampFormatado},${data[1]} mV,${data[2]} Hz,${quality}\n`;
-    
-    const nomeArquivo = `emg_linha_${gerarTimestampArquivo()}.csv`;
-    baixarArquivo(header + csvLine, nomeArquivo);
-    mostrarToast(`Linha exportada: ${nomeArquivo}`);
-}
-
-function baixar() {
-    if (!dom.csvArea.value || dom.csvArea.value.trim() === '') {
-        return mostrarToast('Nenhum dado para exportar!');
-    }
-    
-    const lines = dom.csvArea.value.trim().split('\n');
-    const dataLines = lines.filter(line => line.includes(',') && !line.includes('Timestamp'));
-    
-    const header = 'Data e Hora,Amplitude (mV),Frequência (Hz),Qualidade,Timestamp Original\n';
-    
-    const processedLines = dataLines.map(line => {
-        const data = line.split(',');
-        if (data.length < 3) return null;
-        
-        const timestampFormatado = formatarTimestamp(data[0]);
-        const amplitude = parseFloat(data[1]);
-        const quality = Math.abs(amplitude) > 0.1 ? 'Boa' : 'Baixa';
-        
-        return `${timestampFormatado},${data[1]} mV,${data[2]} Hz,${quality},${data[0]}`;
-    }).filter(line => line !== null);
-    
-    const csvContent = header + processedLines.join('\n') + '\n';
-    
-    const nomeArquivo = `emg_facial_${gerarTimestampArquivo()}.csv`;
-    baixarArquivo(csvContent, nomeArquivo);
-    mostrarToast(`${processedLines.length} registros exportados: ${nomeArquivo}`);
-}
-
-function baixarArquivo(content, fileName) {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+
+    state.savedFiles.unshift({ nome: fileName, hora: new Date().toLocaleTimeString('pt-BR'), urlBlob: url, dados: state.dataForSaving.slice() });
+    renderizarHistorico();
+    mostrarToast(`ARQUIVO SALVO: ${fileName}`);
 }
 
-function mostrarToast(mensagem) {
-    dom.toast.textContent = mensagem;
-    dom.toast.style.display = 'block';
-    dom.toast.style.opacity = '1';
-    safeSetTimeout(() => {
-        dom.toast.style.opacity = '0';
-        safeSetTimeout(() => { dom.toast.style.display = 'none'; }, 400);
-    }, config.TOAST_DURATION_MS);
+function atualizarCronometro() {
+    if (!state.startTime) return;
+    const diff = Math.floor((Date.now() - state.startTime) / 1000);
+    const m = Math.floor(diff / 60).toString().padStart(2,'0');
+    const s = (diff % 60).toString().padStart(2,'0');
+    dom.recordingTime.textContent = `${m}:${s}`; 
 }
 
-function clearAllTimers() {
-    state.activeTimers.forEach(id => {
-        clearTimeout(id);
-        clearInterval(id);
-    });
-    state.activeTimers = [];
+function abrirModal() {
+    dom.saveModal.classList.add('show');
+    dom.inputGroup.classList.add('hidden');
+    dom.modalBody.querySelector('.modal-question').style.display = 'block';
+    dom.modalBody.querySelector('.modal-buttons').style.display = 'flex';
+    dom.fileName.value = `Sessao_${new Date().getHours()}h${new Date().getMinutes()}`;
 }
 
-function safeSetTimeout(callback, delay) {
-    const id = setTimeout(() => {
-        state.activeTimers = state.activeTimers.filter(timerId => timerId !== id);
-        callback();
-    }, delay);
-    state.activeTimers.push(id);
+function fecharModal() {
+    dom.saveModal.classList.remove('show');
+}
 
+function mostrarInputNome() {
+    dom.modalBody.querySelector('.modal-question').style.display = 'none';
+    dom.modalBody.querySelector('.modal-buttons').style.display = 'none';
+    dom.inputGroup.classList.remove('hidden');
+    dom.fileName.focus();
+}
 
-    //teste de commit para ver se funciona o push 
+function salvarArquivo() {
+    const nomeArquivo = dom.fileName.value.trim();
+    if (!nomeArquivo) {
+        mostrarToast('⚠️ Digite um nome para o arquivo!');
+        return;
+    }
+    gerarEExportarCSV(nomeArquivo);
+    fecharModal();
+}
+
+function renderizarHistorico() {
+    const tbody = dom.fileHistoryBody;
+    if (state.savedFiles.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty">Vamos capturar alguns sorrisos?</td></tr>';
+        return;
+    }
+    tbody.innerHTML = state.savedFiles.map((f, index) => `
+        <tr>
+            <td>${f.nome}</td>
+            <td class="text-secondary">${f.hora}</td>
+            <td><button onclick="baixarArquivo(${index})" class="download-link">BAIXAR</button></td>
+        </tr>
+    `).join('');
+}
+
+function baixarArquivo(index) {
+    const arquivo = state.savedFiles[index];
+    if (!arquivo) return;
+    
+    const link = document.createElement('a');
+    link.href = arquivo.urlBlob;
+    link.download = arquivo.nome;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    mostrarToast(`📥 Download: ${arquivo.nome}`);
+}
+
+function limparDados() {
+    if (state.isMonitoring) {
+        mostrarToast('⚠️ Pare a captura antes de limpar os dados!');
+        return;
+    }
+    state.realTimeData = [];
+    state.dataForSaving = []; 
+    state.savedFiles = [];
+    dom.dataTableBody.innerHTML = '';
+    renderizarHistorico();
+    mostrarToast('Dados e histórico de arquivos limpos.');
+}
+
+function atualizarUI(isRecording) {
+    if (isRecording) {
+        dom.startBtn.classList.add('hidden');
+        dom.stopBtn.classList.remove('hidden');
+        dom.connectionStatus.classList.add('active'); 
+    } else {
+        dom.startBtn.classList.remove('hidden');
+        dom.stopBtn.classList.add('hidden');
+        dom.connectionStatus.classList.remove('active');
+    }
+}
+
+function mostrarToast(msg) {
+    dom.toast.textContent = msg;
+    dom.toast.classList.add('show');
+    setTimeout(() => dom.toast.classList.remove('show'), config.TOAST_DURATION_MS);
 }
