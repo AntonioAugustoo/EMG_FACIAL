@@ -23,7 +23,7 @@ Desenvolver um sistema de monitoramento não-invasivo que:
 
 ### Software (Frontend - Web Interface)
 - **Interface**: HTML5 com CSS responsivo
-- **Visualização**: Gráficos em tempo real usando Chart.js
+- **Visualização**: Gráficos em tempo real usando Canvas nativo
 - **Funcionalidades**: Captura, análise e exportação de dados
 - **Compatibilidade**: Multiplataforma via navegador web
 
@@ -93,7 +93,7 @@ ESP32 → Eletrodos EMG → Músculo Zigomático
 - **HTML5**: Estrutura semântica da interface
 - **CSS3**: Estilização responsiva com gradientes e animações
 - **JavaScript ES6**: Lógica da aplicação e comunicação com ESP32
-- **Chart.js**: Biblioteca para gráficos em tempo real
+- **Canvas API**: Renderização de gráficos em tempo real com desenho nativo
 - **Web APIs**: FileSystem API, Blob API, URL API para exportação de dados
 
 ## 🔧 Configuração e Instalação
@@ -139,6 +139,53 @@ O projeto está disponível online através do GitHub Pages para demonstração 
 🔗 **[Acesse a Demo Online](https://antonioaugustoo.github.io/EMG_FACIAL/data/)**
 
 > **Nota**: A versão web hospedada no GitHub Pages é apenas uma demonstração da interface. Para funcionalidade completa com captura de dados EMG em tempo real, é necessário executar o sistema no hardware ESP32.
+
+### 🎭 Modo Demo - Simulação Realista
+
+A demo online utiliza um **gerador de dados biologicamente realista** que simula o comportamento natural do músculo zigomático:
+
+#### 📊 Ciclo de Vida do Sorriso
+
+O modo demo reproduz as 4 fases de um sorriso genuíno:
+
+1. **🔵 Repouso** (Estado Basal)
+   - Valores: 150-280 ADC
+   - Pequenas oscilações naturais (ruído muscular)
+   - Duração: 2-6 segundos entre sorrisos
+
+2. **🟢 Ataque (Onset)** - Início da Contração
+   - Duração: 0.5-0.7 segundos
+   - Subida gradual do repouso ao pico
+   - Curva de aceleração suave (ease-out)
+
+3. **🟡 Sustentação (Apex)** - Pico da Contração
+   - Duração: 1-2 segundos
+   - Mantém amplitude máxima com micro-oscilações
+   - Simula tremor muscular natural
+
+4. **🔴 Queda (Offset)** - Relaxamento
+   - Duração: 0.5-0.8 segundos
+   - Descida gradual ao estado de repouso
+   - Curva de desaceleração suave (ease-in)
+
+#### 💪 Intensidades de Sorriso
+
+O sistema gera 3 tipos de sorriso com distribuição natural:
+
+| Tipo | Probabilidade | ADC (12-bit) | Equivalente µV | Descrição |
+|------|---------------|--------------|----------------|------------|
+| **Leve** | 40% | 800-1500 | 50-200 µV | Sorriso discreto |
+| **Moderado** | 40% | 1500-2500 | 200-500 µV | Sorriso normal |
+| **Largo** | 20% | 2500-4000 | 500-1000 µV | Sorriso intenso |
+
+#### ⚙️ Características Técnicas da Simulação
+
+- **Interpolação Linear**: Transições fluidas entre valores
+- **Curvas de Easing**: Movimentos naturais (cúbico e quadrático)
+- **Oscilações Orgânicas**: Função senoidal + ruído aleatório
+- **Fidelidade Biológica**: Baseado em estudos de eletromiografia facial
+
+> 💡 **Dica**: No código ([script.js](data/script.js)), altere `const isDemoMode = false` para usar dados reais do ESP32.
 
 ## 🎓 Aplicações
 
@@ -218,8 +265,9 @@ Contribuições são bem-vindas! Sinta-se à vontade para:
 
 - [Documentação do ESP32](https://docs.espressif.com/projects/esp-idf/en/latest/)
 - [PlatformIO Docs](https://docs.platformio.org/)
-- [Chart.js Documentation](https://www.chartjs.org/docs/)
+- [Canvas API - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)
 - [EMG Signal Processing](https://en.wikipedia.org/wiki/Electromyography)
+- [Facial Action Coding System](https://en.wikipedia.org/wiki/Facial_Action_Coding_System)
 
 ---
 

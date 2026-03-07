@@ -1,5 +1,23 @@
 let dom = {};
 
+// ==================== MODO DEMO ====================
+// 🎭 Para GitHub Pages: defina como true
+// 🔌 Para ESP32 real: defina como false
+const isDemoMode = true; // Mude para true para ativar o modo demo com dados simulados
+
+let demoTimestamp = 0; // Contador de tempo simulado
+
+// Estado da simulação do sorriso (máquina de estados)
+let sorrisoState = {
+    fase: 'repouso',        // 'repouso', 'ataque', 'sustentacao', 'queda'
+    valorAtual: 200,        // Valor ADC atual (inicia em repouso)
+    valorAlvo: 200,         // Valor ADC alvo
+    tempoNaFase: 0,         // Tempo decorrido na fase atual (ms)
+    duracaoFase: 0,         // Duração planejada da fase (ms)
+    proximoEvento: 2000     // Tempo até próximo sorriso (ms)
+};
+// ===================================================
+
 const config = {
 
     DATA_FETCH_INTERVAL_MS: 10, 
@@ -130,14 +148,137 @@ addEventListener('DOMContentLoaded', () => {
 
 });
 
+// ==================== GERADOR DE DADOS DEMO ====================
+/**
+ * Gera dados simulados de EMG com ciclo de vida realista do sorriso
+ * Anatomia do sorriso:
+ * - Repouso: 100-300 ADC (ruído basal)
+ * - Ataque (onset): 0.5-0.7s subida gradual
+ * - Sustentação (apex): 1-2s no pico (1500-4000 ADC)
+ * - Queda (offset): descida gradual ao repouso
+ */
+function gerarDadosDemo() {
+    // Atualiza o timestamp simulado
+    demoTimestamp += config.DATA_FETCH_INTERVAL_MS;
+    sorrisoState.tempoNaFase += config.DATA_FETCH_INTERVAL_MS;
+    
+    // Máquina de estados do sorriso
+    switch (sorrisoState.fase) {
+        case 'repouso':
+            // Em repouso: pequenas variações em torno de 150-250 ADC
+            sorrisoState.valorAtual = 180 + Math.random() * 80 + Math.sin(demoTimestamp / 100) * 20;
+            
+            // Verifica se é hora de iniciar um sorriso
+            if (sorrisoState.tempoNaFase >= sorrisoState.proximoEvento) {
+                iniciarSorriso();
+            }
+            break;
+            
+        case 'ataque':
+            // Subida gradual (onset): interpolação suave do repouso ao pico
+            const progressoAtaque = sorrisoState.tempoNaFase / sorrisoState.duracaoFase;
+            const easeOutAtaque = 1 - Math.pow(1 - progressoAtaque, 3); // Curva de aceleração
+            
+            sorrisoState.valorAtual = lerp(200, sorrisoState.valorAlvo, easeOutAtaque);
+            
+            // Adiciona micro-variações naturais
+            sorrisoState.valorAtual += (Math.random() - 0.5) * 50;
+            
+            if (sorrisoState.tempoNaFase >= sorrisoState.duracaoFase) {
+                sorrisoState.fase = 'sustentacao';
+                sorrisoState.tempoNaFase = 0;
+                sorrisoState.duracaoFase = 1000 + Math.random() * 1000; // 1-2s
+            }
+            break;
+            
+        case 'sustentacao':
+            // Mantém no pico com pequenas oscilações
+            const oscilacao = Math.sin(demoTimestamp / 50) * 30;
+            sorrisoState.valorAtual = sorrisoState.valorAlvo + oscilacao + (Math.random() - 0.5) * 40;
+            
+            if (sorrisoState.tempoNaFase >= sorrisoState.duracaoFase) {
+                sorrisoState.fase = 'queda';
+                sorrisoState.tempoNaFase = 0;
+                sorrisoState.duracaoFase = 500 + Math.random() * 300; // 0.5-0.8s
+            }
+            break;
+            
+        case 'queda':
+            // Descida gradual (offset): do pico ao repouso
+            const progressoQueda = sorrisoState.tempoNaFase / sorrisoState.duracaoFase;
+            const easeInQueda = Math.pow(progressoQueda, 2); // Curva de desaceleração
+            
+            sorrisoState.valorAtual = lerp(sorrisoState.valorAlvo, 200, easeInQueda);
+            sorrisoState.valorAtual += (Math.random() - 0.5) * 30;
+            
+            if (sorrisoState.tempoNaFase >= sorrisoState.duracaoFase) {
+                sorrisoState.fase = 'repouso';
+                sorrisoState.tempoNaFase = 0;
+                sorrisoState.proximoEvento = 2000 + Math.random() * 4000; // 2-6s até próximo sorriso
+            }
+            break;
+    }
+    
+    // Garante que o valor esteja dentro dos limites do ADC
+    const rawValue = Math.max(50, Math.min(4095, Math.floor(sorrisoState.valorAtual)));
+    
+    // Valor filtrado é suavizado (85-95% do raw)
+    const filteredValue = Math.floor(rawValue * (0.88 + Math.random() * 0.07));
+    
+    return {
+        time_ms: demoTimestamp,
+        raw: rawValue,
+        filtered: filteredValue
+    };
+}
 
+/**
+ * Inicia um novo ciclo de sorriso
+ */
+function iniciarSorriso() {
+    sorrisoState.fase = 'ataque';
+    sorrisoState.tempoNaFase = 0;
+    sorrisoState.duracaoFase = 500 + Math.random() * 200; // 0.5-0.7s
+    
+    // Define intensidade do sorriso (leve, moderado ou largo)
+    const tipo = Math.random();
+    if (tipo < 0.4) {
+        // Sorriso leve (40% das vezes): 800-1500 ADC
+        sorrisoState.valorAlvo = 800 + Math.random() * 700;
+    } else if (tipo < 0.8) {
+        // Sorriso moderado (40% das vezes): 1500-2500 ADC
+        sorrisoState.valorAlvo = 1500 + Math.random() * 1000;
+    } else {
+        // Sorriso largo/máximo (20% das vezes): 2500-4000 ADC
+        sorrisoState.valorAlvo = 2500 + Math.random() * 1500;
+    }
+}
+
+/**
+ * Interpolação linear entre dois valores
+ */
+function lerp(inicio, fim, t) {
+    return inicio + (fim - inicio) * t;
+}
+// ================================================================
 
 function buscarDadosRealTime() {
 
     if (!state.isMonitoring) return; 
 
+    // ==================== MODO DEMO: BYPASS DO FETCH ====================
+    if (isDemoMode) {
+        // Em modo demo, gera dados simulados sem fazer requisição HTTP
+        const dadosSimulados = gerarDadosDemo();
+        processarAmostraRealTime(dadosSimulados);
+        
+        // Agenda próxima chamada
+        setTimeout(buscarDadosRealTime, config.DATA_FETCH_INTERVAL_MS);
+        return; // Early return: não executa o fetch real
+    }
+    // ====================================================================
 
-
+    // MODO REAL: Requisição HTTP para ESP32
     fetch('/live_data') 
 
         .then(res => {
@@ -528,9 +669,23 @@ function iniciarMonitoramento() {
 
     atualizarUI(true);
 
-    mostrarToast('✨ CAPTURANDO SINAL EMG...');
-
-    fetch('/start').catch(e => console.error("Falha ao enviar /start:", e)); 
+    // Reset do timestamp demo ao iniciar nova sessão
+    if (isDemoMode) {
+        demoTimestamp = 0;
+        // Reseta o estado do sorriso para começar em repouso
+        sorrisoState = {
+            fase: 'repouso',
+            valorAtual: 200,
+            valorAlvo: 200,
+            tempoNaFase: 0,
+            duracaoFase: 0,
+            proximoEvento: 1000 + Math.random() * 2000 // Primeiro sorriso em 1-3s
+        };
+        mostrarToast('🎭 MODO DEMO - Dados Simulados');
+    } else {
+        mostrarToast('✨ CAPTURANDO SINAL EMG...');
+        fetch('/start').catch(e => console.error("Falha ao enviar /start:", e)); 
+    }
 
     setTimeout(() => {
 
@@ -552,7 +707,10 @@ function pararESalvar() {
 
     clearInterval(state.intervals.timer);
 
-    fetch('/stop').catch(e => console.error("Falha ao enviar /stop:", e));
+    // Só faz fetch para /stop se NÃO estiver em modo demo
+    if (!isDemoMode) {
+        fetch('/stop').catch(e => console.error("Falha ao enviar /stop:", e));
+    }
 
     atualizarUI(false);
 
