@@ -35,7 +35,7 @@ ESP32 → Eletrodos EMG → Músculo Zigomático
 ```
 
 ### 2. **Processo de Captura**
-1. **Inicialização**: ESP32 cria rede WiFi "ESP32_CSV"
+1. **Inicialização**: ESP32 cria rede WiFi "ESP32_AP"
 2. **Conexão**: Usuario conecta via navegador (IP: 192.168.4.1)
 3. **Calibração**: Sistema estabelece linha base do sinal
 4. **Monitoramento**: Captura contínua a 1kHz por 3 segundos
@@ -81,18 +81,20 @@ ESP32 → Eletrodos EMG → Músculo Zigomático
 
 ## 🛠️ Tecnologias Utilizadas
 
-### Backend
-- **PlatformIO**: Ambiente de desenvolvimento
-- **ESP32**: Microcontrolador com WiFi
-- **C++**: Linguagem de programação
-- **WebServer**: Servidor HTTP embarcado
+### Backend (Firmware ESP32)
+- **PlatformIO**: Ambiente de desenvolvimento e gerenciamento de dependências
+- **ESP32 (Arduino Framework)**: Microcontrolador com WiFi integrado
+- **C++**: Linguagem de programação do firmware
+- **ESP32 WebServer**: Servidor HTTP embarcado
+- **LittleFS**: Sistema de arquivos para armazenar interface web
+- **ArduinoJson**: Biblioteca para manipulação de dados JSON
 
-### Frontend
-- **HTML5**: Estrutura da interface
-- **CSS3**: Estilização responsiva
-- **JavaScript ES6**: Lógica da aplicação
-- **Chart.js**: Biblioteca para gráficos
-- **Web APIs**: FileSystem, Blob, URL para exportação
+### Frontend (Interface Web)
+- **HTML5**: Estrutura semântica da interface
+- **CSS3**: Estilização responsiva com gradientes e animações
+- **JavaScript ES6**: Lógica da aplicação e comunicação com ESP32
+- **Chart.js**: Biblioteca para gráficos em tempo real
+- **Web APIs**: FileSystem API, Blob API, URL API para exportação de dados
 
 ## 🔧 Configuração e Instalação
 
@@ -120,9 +122,24 @@ code .
 - Conecte o ESP32 via USB
 - Compile e faça upload do código (Ctrl+Alt+U)
 
-4. **Acesse a Interface**
-- Conecte WiFi "ESP32_CSV" (senha: 12345678)
+4. **Upload dos Arquivos Web**
+```bash
+# Faça upload do sistema de arquivos para o ESP32
+pio run --target uploadfs
+```
+
+5. **Acesse a Interface**
+- Conecte WiFi "ESP32_AP" (senha: 12345678)
 - Abra navegador: `http://192.168.4.1`
+
+## 🌐 GitHub Pages
+
+O projeto está disponível online através do GitHub Pages para demonstração da interface:
+
+🔗 **[Acesse a Demo Online](https://antonioaugustoo.github.io/EMG_FACIAL/data/)**
+
+> **Nota**: A versão web hospedada no GitHub Pages é apenas uma demonstração da interface. Para funcionalidade completa com captura de dados EMG em tempo real, é necessário executar o sistema no hardware ESP32.
+
 ## 🎓 Aplicações
 
 ### Área Médica
@@ -147,24 +164,55 @@ code .
 
 ```
 EMG_FACIAL/
+├── .gitignore                # Arquivos ignorados pelo Git
+├── platformio.ini            # Configurações do PlatformIO
 ├── README.md                 # Documentação principal
-├── .gitignore               # Arquivos ignorados pelo Git
-├── BackEnd/                 # Código do ESP32
-│   ├── platformio.ini       # Configurações do PlatformIO
-│   ├── src/
-│   │   └── main.cpp         # Código principal do ESP32/ Lógica da aplicação
-│   ├── include/             # Headers personalizados
-│   ├── lib/                 # Bibliotecas locais
-│   └── test/                # Testes unitários
-└── FrontEnd/                # Interface Web
-    ├── index.html        # Esqueleto da página
-    ├── style.css         # Estilos da interface
-    └──script.js          # Página dinâmica
+├── data/                     # Interface Web (SPIFFS/LittleFS)
+│   ├── index.html            # Página principal da interface
+│   ├── style.css             # Estilos da interface
+│   ├── script.js             # Lógica da aplicação web
+│   ├── animations.js         # Animações e efeitos visuais
+│   └── README.md             # Documentação do frontend
+└── src/
+    └── main.cpp              # Código principal do ESP32 (firmware)
 ```
-## 👥 Autores - Desenvolvimento inicial
 
-- **Antonio Augusto** - *FrontEnd* - [@AntonioAugusto](https://github.com/AntonioAugustoo)
-- **Emily Horrana** - *BackEnd* - [@emyHorrana](https://github.com/emyHorrana)
+### 📝 Descrição dos Diretórios
+
+- **data/**: Arquivos da interface web que serão carregados no sistema de arquivos LittleFS do ESP32
+  - Contém todo o frontend: HTML, CSS, JavaScript
+  - Servidos pelo ESP32 via WebServer embutido
+  
+- **src/**: Código-fonte C++ do firmware ESP32
+  - Servidor web e Access Point WiFi
+  - Processamento de sinais EMG em tempo real
+  - Comunicação com navegador via HTTP
+
+- **platformio.ini**: Configurações do projeto
+  - Plataforma: ESP32
+  - Framework: Arduino
+  - Dependências: ESP32 WebServer, ArduinoJson
+  - Sistema de arquivos: LittleFS
+## 👥 Autores
+
+Desenvolvimento do projeto EMG Facial:
+
+- **Antonio Augusto** - *Desenvolvimento Frontend e Interface Web* - [@AntonioAugustoo](https://github.com/AntonioAugustoo)
+- **Emily Horrana** - *Desenvolvimento Backend e Firmware ESP32* - [@emyHorrana](https://github.com/emyHorrana)
+
+## 📄 Licença
+
+Este projeto está sob a licença MIT - veja os detalhes na documentação.
+
+## 🤝 Contribuições
+
+Contribuições são bem-vindas! Sinta-se à vontade para:
+
+1. Fazer um fork do projeto
+2. Criar uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abrir um Pull Request
 
 ## 🔗 Links Úteis
 

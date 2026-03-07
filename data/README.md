@@ -32,19 +32,27 @@ Bem-vindo ao FrontEnd do projeto **EMG Facial**! Aqui você encontra a interface
 ## 📂 Estrutura da Pasta
 
 ```
-FrontEnd/
-├── homepage.html
-├── homepage.css
-├── homepage.js
-└── README.md
+data/
+├── index.html        # Página principal da interface
+├── style.css         # Estilos e design da interface
+├── script.js         # Lógica da aplicação web
+├── animations.js     # Animações e efeitos visuais
+└── README.md         # Esta documentação
 ```
 
 ## 💡 Como Usar
 
-1. Abra o arquivo `homepage.html` em seu navegador.
-2. Conecte o eletrodo facial.
-3. Use os botões para iniciar/parar a captura, exportar ou limpar os dados.
-4. Visualize o gráfico e os dados em tempo real.
+### No ESP32 (Modo Completo)
+1. Faça upload do firmware e dos arquivos web para o ESP32
+2. Conecte-se à rede WiFi "ESP32_AP" (senha: 12345678)
+3. Acesse `http://192.168.4.1` no navegador
+4. Conecte o eletrodo facial
+5. Use os botões para iniciar/parar a captura, exportar ou limpar os dados
+6. Visualize o gráfico e os dados em tempo real
+
+### Demo Online (GitHub Pages)
+1. Acesse https://antonioaugustoo.github.io/EMG_FACIAL/data/
+2. Explore a interface (sem captura real de dados EMG)
 
 ## 🤝 Contribuição
 
