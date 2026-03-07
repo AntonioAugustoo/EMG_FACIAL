@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmileTrack - Monitor de Felicidade</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>✨</text></svg>">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+    
+    <script src="script.js" defer></script>
+    <script src="animations.js" defer></script>
+</head>
+
+
+<body>
+    <div class="cursor-glow"></div>
+    <div class="bg-particles"></div>
+
+    <div class="container glass-panel">
+        <header class="header">
+            <div class="header-content">
+                <h1 id="main-title">MONITOR DE SORRISOS ✨</h1>
+                <p id="sub-title">Capturando Energia Positiva em Tempo Real</p>
+            </div>
+            <div class="header-status">
+                <span class="status-badge" id="connectionStatus">
+                    <span class="dot"></span> ELETRODOS ATIVOS
+                </span>
+                <span class="clock" id="clock">00:00:00</span>
+            </div>
+        </header>
+
+        <div class="main-layout">
+            <aside class="sidebar">
+                <div class="control-group">
+                    <button class="btn btn-primary" id="startBtn">
+                        <span class="icon">😊</span> INICIAR CAPTURA
+                    </button>
+                    <button class="btn btn-danger hidden" id="stopBtn">
+                        <span class="icon">⏹</span> SALVAR ALEGRIA
+                    </button>
+                    <button class="btn btn-secondary" id="clearBtn">
+                        <span class="icon">✨</span> LIMPAR TELA
+                    </button>
+                </div>
+
+                <div class="metric-card active-card">
+                    <label>INTENSIDADE DO SORRISO</label>
+                    <div class="value-large" id="currentAmplitude">0.00 <span class="unit">mV</span></div>
+                </div>
+
+                <div class="metric-card">
+                    <label>FREQUÊNCIA MÉDIA</label>
+                    <div class="value-medium" id="avgFrequency">0.0 <span class="unit">Hz</span></div>
+                </div>
+
+                <div class="metric-card">
+                    <label>DURAÇÃO DA ALEGRIA</label>
+                    <div class="value-medium" id="recordingTime">00:00</div>
+                </div>
+            </aside>
+
+            <main class="content-area">
+                <div class="chart-wrapper glass-card">
+                    <div class="card-header">
+                        <h3>FLUXO DE ENERGIA MUSCULAR</h3>
+                        <div class="live-indicator">AO VIVO</div>
+                    </div>
+                    <canvas id="signalChart"></canvas>
+                        <div class="chart-legend">
+                            <div class="legend-item"><span class="legend-color filtered"></span> Sinal Filtrado</div>
+                            <div class="legend-item"><span class="legend-color raw"></span> Sinal Bruto</div>
+                        </div>
+                </div>
+
+                <div class="bottom-grid">
+                    <div class="glass-card history-card">
+                        <div class="card-header">
+                            <h3>SESSÕES GRAVADAS</h3>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="happy-table">
+                                <thead>
+                                    <tr>
+                                        <th>ARQUIVO</th>
+                                        <th>HORA</th>
+                                        <th>AÇÃO</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fileHistoryBody">
+                                    <tr><td colspan="3" class="empty">Vamos capturar alguns sorrisos?</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="glass-card log-card">
+                        <div class="card-header">
+                            <h3>PICOS DE ALEGRIA</h3>
+                        </div>
+                        <div class="mini-log" id="dataTableBody">
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+    
+    <!-- Modal de Salvamento -->
+    <div id="saveModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>💾 Salvar Sessão de Alegria?</h2>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <p class="modal-question">Deseja salvar os dados capturados?</p>
+                <div class="modal-buttons">
+                    <button class="btn-modal btn-no" id="btnNo">NÃO</button>
+                    <button class="btn-modal btn-yes" id="btnYes">SIM</button>
+                </div>
+                <div class="modal-input-group hidden" id="inputGroup">
+                    <input type="text" id="fileName" class="file-input" placeholder="Digite o nome da sessão...">
+                    <button class="btn-save" id="btnSave">✓ SALVAR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
